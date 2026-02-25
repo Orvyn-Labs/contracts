@@ -1,0 +1,25 @@
+# ── Foundry build artifacts ───────────────────────────────────────────────────
+out/
+cache/
+
+# ── Deployment broadcast logs ─────────────────────────────────────────────────
+# Remove this line if you want to commit deployment receipts for audit trail
+broadcast/
+
+# ── Gas snapshot ─────────────────────────────────────────────────────────────
+# Commit .gas-snapshot to track gas regressions in CI; ignore locally if noisy
+# .gas-snapshot
+
+# ── Coverage reports ─────────────────────────────────────────────────────────
+lcov.info
+coverage/
+
+# ── Environment / Secrets ─────────────────────────────────────────────────────
+.env
+.env.local
+
+# ── Editor ────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*~
