@@ -48,7 +48,7 @@ contract Deploy is Script {
     uint256 constant INITIAL_YIELD_POOL_FUNDING = 0.1 ether;
 
     function run() external {
-        uint256 deployerPrivateKey = vm.envOr("PRIVATE_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
 
         console.log("=== Research Crowdfunding dApp Deployment ===");

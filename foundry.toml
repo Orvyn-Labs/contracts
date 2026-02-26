@@ -33,3 +33,13 @@ fuzz = { runs = 1000 }
 line_length = 100
 tab_width = 4
 bracket_spacing = true
+
+# RPC endpoints
+[rpc_endpoints]
+base_sepolia = "https://base-sepolia.drpc.org"
+base         = "https://base.drpc.org"
+
+# Contract verification
+[etherscan]
+base_sepolia = { key = "${BASESCAN_API_KEY}", url = "https://api.etherscan.io/v2/api?chainid=84532" }
+base         = { key = "${BASESCAN_API_KEY}", url = "https://api.etherscan.io/v2/api?chainid=8453" }
