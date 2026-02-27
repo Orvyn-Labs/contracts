@@ -68,7 +68,6 @@ contract ResearchProject is Initializable, ReentrancyGuard {
     uint256 public totalRaised;
     uint256 public deadline;
     Status public status;
-    bool public fundsWithdrawn;
     mapping(address => uint256) public donations;
 
     // ─── Constructor ──────────────────────────────────────────────────────────

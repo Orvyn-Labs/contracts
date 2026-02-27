@@ -98,9 +98,12 @@ contract FundingPool is AccessControl, ReentrancyGuard {
         onlyRole(DEPOSITOR_ROLE)
     {
         if (amount == 0) revert ZeroAmount();
+        if (project == address(0)) revert ZeroAddress();
 
         dkt.safeTransferFrom(msg.sender, address(this), amount);
-        totalPool += amount;
+        
+        // Credit the project's allocation immediately so the researcher can withdraw later
+        projectAllocations[project] += amount;
         totalDonationsReceived += amount;
 
         emit DonationReceived(project, donor, amount, totalPool, block.number);
