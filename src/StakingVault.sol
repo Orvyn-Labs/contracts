@@ -17,22 +17,26 @@ import "./interfaces/IYieldDistributor.sol";
  *
  * @dev COMPLEXITY LEVEL 2 — medium complexity (ERC-20 transfer + multiple SSTOREs).
  *
+ *      Yield-split mechanic (v2):
+ *        When calling stake(), the user specifies:
+ *          - targetProject : a ResearchProject address to receive donated yield
+ *          - donateBps     : basis points (0–10_000) of yield to route to that project
+ *        Example: donateBps=7000 → 70% goes to the project, 30% back to staker.
+ *        donateBps=0  → 100% of yield returned to staker (no donation).
+ *        donateBps=10_000 → 100% donated to project.
+ *        The split is locked until the staker fully unstakes.
+ *
  *      Flow:
  *        1. User approves StakingVault to spend DKT
- *        2. User calls stake(amount)  → DKT transferred in, YieldDistributor notified
- *        3. After lockPeriod, user calls unstake(amount) → DKT returned
- *        4. User calls YieldDistributor.claimYield() separately (pull pattern)
+ *        2. User calls stake(amount, targetProject, donateBps)
+ *        3. After lockPeriod, user calls unstake(amount)
+ *        4. User calls claimYield() — yield is automatically split
  *
- *      The lock period is a research parameter — it can be set to 0 for
- *      unrestricted unstaking during load tests, or to a realistic value
- *      (e.g. 7 days) for standard evaluation runs.
- *
- * Upgradeability: UUPS — allows tuning lock period and emergency pause logic
- *                 between research experiment versions.
+ * Upgradeability: UUPS — allows tuning lock period between research runs.
  *
  * Gas profile targets:
- *   stake(1 DKT)    ~95,000 gas  (ERC-20 transferFrom + 3 SSTOREs + external call)
- *   unstake(1 DKT)  ~80,000 gas  (ERC-20 transfer + 2 SSTOREs + external call)
+ *   stake()    ~105,000 gas  (ERC-20 transferFrom + 4 SSTOREs + external call)
+ *   unstake()  ~85,000  gas  (ERC-20 transfer + 3 SSTOREs + external call)
  */
 contract StakingVault is
     Initializable,
@@ -51,6 +55,8 @@ contract StakingVault is
     error StillLocked(uint256 unlockTime, uint256 currentTime);
     error InsufficientStake(uint256 requested, uint256 available);
     error LockPeriodTooLong(uint256 requested, uint256 max);
+    error InvalidDonateBps(uint16 bps);
+    error ProjectRequiredForDonation();
 
     // ─── Events ───────────────────────────────────────────────────────────────
     event Staked(
@@ -58,6 +64,8 @@ contract StakingVault is
         uint256 amount,
         uint256 newBalance,
         uint256 lockExpiry,
+        address indexed targetProject,
+        uint16  donateBps,
         uint256 blockNumber
     );
     event Unstaked(
@@ -72,22 +80,15 @@ contract StakingVault is
     // ─── Storage (ERC-7201 namespaced) ────────────────────────────────────────
     /// @custom:storage-location erc7201:skripsi.StakingVault
     struct StakingVaultStorage {
-        // DKT token contract
         IERC20 dkt;
-        // YieldDistributor contract
         IYieldDistributor yieldDistributor;
-        // Lock period in seconds (research parameter)
         uint256 lockPeriod;
-        // Total DKT staked across all users
         uint256 totalStaked;
-        // Per-user staked balance
         mapping(address => uint256) stakedBalance;
-        // Per-user lock expiry timestamp
         mapping(address => uint256) lockExpiry;
     }
 
     function _storage() private pure returns (StakingVaultStorage storage $) {
-        // keccak256("skripsi.StakingVault.storage") — stable slot for this contract
         assembly {
             $.slot := 0xa3f5c8b2e1d4f7a6b9c0d2e4f6a8b0c2d4e6f8a0b2c4d6e8f0a2b4c6d8e0f200
         }
@@ -100,12 +101,6 @@ contract StakingVault is
     }
 
     // ─── Initializer ─────────────────────────────────────────────────────────
-    /**
-     * @param admin               Address granted admin roles
-     * @param dktTokenAddr        DiktiToken (DKT) contract address
-     * @param yieldDistributorAddr YieldDistributor contract address
-     * @param initialLockPeriod   Lock duration in seconds (0 = no lock, for tests)
-     */
     function initialize(
         address admin,
         address dktTokenAddr,
@@ -130,38 +125,43 @@ contract StakingVault is
 
     // ─── Core: Stake ──────────────────────────────────────────────────────────
     /**
-     * @notice Stake DKT tokens. Principal is locked for `lockPeriod` seconds.
-     * @dev    Transfers DKT from caller → vault.
-     *         Notifies YieldDistributor so it can update the reward index.
-     *         Lock expiry is refreshed on each stake call (extends the lock).
-     * @param  amount DKT amount (in token units, 18 decimals)
+     * @notice Stake DKT tokens with a yield-split configuration.
+     * @param  amount        DKT amount to stake (18 decimals)
+     * @param  targetProject ResearchProject address to receive donated yield.
+     *                       Pass address(0) if donateBps == 0 (no donation).
+     * @param  donateBps     Basis points (0–10_000) of yield to donate to the project.
+     *                       0     = 100% yield returned to staker
+     *                       5000  = 50% to project, 50% to staker
+     *                       10000 = 100% to project
+     *
+     * @dev If donateBps > 0, targetProject must be non-zero.
+     *      The split is forwarded to YieldDistributor and locked until unstake.
      */
-    function stake(uint256 amount) external nonReentrant {
+    function stake(uint256 amount, address targetProject, uint16 donateBps) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
+        if (donateBps > 10_000) revert InvalidDonateBps(donateBps);
+        if (donateBps > 0 && targetProject == address(0)) revert ProjectRequiredForDonation();
 
         StakingVaultStorage storage $ = _storage();
 
-        // Transfer DKT from user (requires prior approve)
         $.dkt.safeTransferFrom(msg.sender, address(this), amount);
 
-        // Update state before external call (CEI)
         $.stakedBalance[msg.sender] += amount;
         $.totalStaked += amount;
         uint256 expiry = block.timestamp + $.lockPeriod;
         $.lockExpiry[msg.sender] = expiry;
 
-        // Notify YieldDistributor (external call — after state updates)
-        $.yieldDistributor.notifyStake(msg.sender, amount);
+        // Notify YieldDistributor with split config (external call — after state updates)
+        $.yieldDistributor.notifyStake(msg.sender, amount, targetProject, donateBps);
 
-        emit Staked(msg.sender, amount, $.stakedBalance[msg.sender], expiry, block.number);
+        emit Staked(msg.sender, amount, $.stakedBalance[msg.sender], expiry, targetProject, donateBps, block.number);
     }
 
     // ─── Core: Unstake ───────────────────────────────────────────────────────
     /**
      * @notice Unstake DKT tokens. Reverts if still within lock period.
-     * @dev    Returns DKT to caller. Notifies YieldDistributor.
-     *         Does NOT auto-claim yield — user must call YieldDistributor.claimYield().
-     * @param  amount DKT amount to unstake
+     * @dev    Does NOT auto-claim yield — user must call YieldDistributor.claimYield().
+     *         Clears the yield-split config when balance reaches zero.
      */
     function unstake(uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
@@ -174,27 +174,19 @@ contract StakingVault is
         uint256 expiry = $.lockExpiry[msg.sender];
         if (block.timestamp < expiry) revert StillLocked(expiry, block.timestamp);
 
-        // CEI: Update state before external calls
         unchecked {
             $.stakedBalance[msg.sender] = balance - amount;
             $.totalStaked -= amount;
         }
 
-        // Notify YieldDistributor (external call)
         $.yieldDistributor.notifyUnstake(msg.sender, amount);
 
-        // Return DKT to user
         $.dkt.safeTransfer(msg.sender, amount);
 
         emit Unstaked(msg.sender, amount, $.stakedBalance[msg.sender], block.number);
     }
 
     // ─── Admin: Configuration ─────────────────────────────────────────────────
-    /**
-     * @notice Update the lock period.
-     * @dev    Research parameter — set to 0 for load tests, realistic value for
-     *         standard evaluation runs. Does NOT affect existing stakes.
-     */
     function setLockPeriod(uint256 newPeriod) external onlyRole(VAULT_ADMIN_ROLE) {
         if (newPeriod > 365 days) revert LockPeriodTooLong(newPeriod, 365 days);
         StakingVaultStorage storage $ = _storage();
@@ -203,11 +195,6 @@ contract StakingVault is
         emit LockPeriodUpdated(old, newPeriod);
     }
 
-    /**
-     * @notice Update the YieldDistributor address.
-     * @dev    Allows upgrading to a new yield algorithm version
-     *         (e.g. V1 linear → V2 compound) while preserving vault balances.
-     */
     function setYieldDistributor(address newDistributor) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (newDistributor == address(0)) revert ZeroAddress();
         StakingVaultStorage storage $ = _storage();

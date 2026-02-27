@@ -113,6 +113,14 @@ contract Deploy is Script {
         fundingPool.grantRole(fundingPool.DEFAULT_ADMIN_ROLE(), address(factory));
         console.log("FundingPool: DEFAULT_ADMIN_ROLE granted to factory");
 
+        // YieldDistributor needs DEPOSITOR_ROLE to call receiveYieldForProject()
+        fundingPool.grantRole(fundingPool.DEPOSITOR_ROLE(), address(dist));
+        console.log("FundingPool: DEPOSITOR_ROLE granted to YieldDistributor");
+
+        // Wire FundingPool address into YieldDistributor
+        dist.setFundingPool(address(fundingPool));
+        console.log("YieldDistributor.fundingPool set to:", address(fundingPool));
+
         // ── 9. (Optional) Fund yield pool ────────────────────────────────────
         if (INITIAL_YIELD_POOL_FUNDING > 0 && deployer.balance >= INITIAL_YIELD_POOL_FUNDING) {
             dist.fundYieldPool{value: INITIAL_YIELD_POOL_FUNDING}();

@@ -79,7 +79,7 @@ contract StakingVaultTest is Test {
     function test_Stake_TransfersDKT() public {
         vm.startPrank(alice);
         dkt.approve(address(vault), 1000 ether);
-        vault.stake(1000 ether);
+        vault.stake(1000 ether, address(0), 0);
         vm.stopPrank();
 
         assertEq(vault.stakedBalance(alice), 1000 ether);
@@ -91,7 +91,7 @@ contract StakingVaultTest is Test {
     function test_Stake_SetsLockExpiry() public {
         vm.startPrank(alice);
         dkt.approve(address(vault), 1000 ether);
-        vault.stake(1000 ether);
+        vault.stake(1000 ether, address(0), 0);
         vm.stopPrank();
 
         assertEq(vault.lockExpiry(alice), block.timestamp + LOCK_PERIOD);
@@ -101,15 +101,15 @@ contract StakingVaultTest is Test {
         vm.startPrank(alice);
         dkt.approve(address(vault), 1000 ether);
         vm.expectEmit(true, false, false, false);
-        emit StakingVault.Staked(alice, 1000 ether, 1000 ether, block.timestamp + LOCK_PERIOD, block.number);
-        vault.stake(1000 ether);
+        emit StakingVault.Staked(alice, 1000 ether, 1000 ether, block.timestamp + LOCK_PERIOD, address(0), 0, block.number);
+        vault.stake(1000 ether, address(0), 0);
         vm.stopPrank();
     }
 
     function test_Stake_NotifiesYieldDistributor() public {
         vm.startPrank(alice);
         dkt.approve(address(vault), 1000 ether);
-        vault.stake(1000 ether);
+        vault.stake(1000 ether, address(0), 0);
         vm.stopPrank();
 
         assertEq(dist.userStakedBalance(alice), 1000 ether);
@@ -119,18 +119,18 @@ contract StakingVaultTest is Test {
     function test_Stake_RevertsZeroAmount() public {
         vm.prank(alice);
         vm.expectRevert(StakingVault.ZeroAmount.selector);
-        vault.stake(0);
+        vault.stake(0, address(0), 0);
     }
 
     function test_Stake_MultipleUsers() public {
         vm.startPrank(alice);
         dkt.approve(address(vault), 1000 ether);
-        vault.stake(1000 ether);
+        vault.stake(1000 ether, address(0), 0);
         vm.stopPrank();
 
         vm.startPrank(bob);
         dkt.approve(address(vault), 2000 ether);
-        vault.stake(2000 ether);
+        vault.stake(2000 ether, address(0), 0);
         vm.stopPrank();
 
         assertEq(vault.totalStaked(), 3000 ether);
@@ -142,7 +142,7 @@ contract StakingVaultTest is Test {
     function test_Unstake_AfterLockPeriod() public {
         vm.startPrank(alice);
         dkt.approve(address(vault), 1000 ether);
-        vault.stake(1000 ether);
+        vault.stake(1000 ether, address(0), 0);
         vm.stopPrank();
 
         vm.warp(block.timestamp + LOCK_PERIOD + 1);
@@ -157,7 +157,7 @@ contract StakingVaultTest is Test {
     function test_Unstake_RevertsBeforeLock() public {
         vm.startPrank(alice);
         dkt.approve(address(vault), 1000 ether);
-        vault.stake(1000 ether);
+        vault.stake(1000 ether, address(0), 0);
         vm.stopPrank();
 
         vm.prank(alice);
@@ -168,7 +168,7 @@ contract StakingVaultTest is Test {
     function test_Unstake_PartialAmount() public {
         vm.startPrank(alice);
         dkt.approve(address(vault), 1000 ether);
-        vault.stake(1000 ether);
+        vault.stake(1000 ether, address(0), 0);
         vm.stopPrank();
 
         vm.warp(block.timestamp + LOCK_PERIOD + 1);
@@ -183,7 +183,7 @@ contract StakingVaultTest is Test {
     function test_Unstake_RevertsInsufficientBalance() public {
         vm.startPrank(alice);
         dkt.approve(address(vault), 1000 ether);
-        vault.stake(1000 ether);
+        vault.stake(1000 ether, address(0), 0);
         vm.stopPrank();
 
         vm.warp(block.timestamp + LOCK_PERIOD + 1);
@@ -196,7 +196,7 @@ contract StakingVaultTest is Test {
     function test_Unstake_EmitsEvent() public {
         vm.startPrank(alice);
         dkt.approve(address(vault), 1000 ether);
-        vault.stake(1000 ether);
+        vault.stake(1000 ether, address(0), 0);
         vm.stopPrank();
 
         vm.warp(block.timestamp + LOCK_PERIOD + 1);
@@ -230,7 +230,7 @@ contract StakingVaultTest is Test {
     function test_Yield_AccruesAfterStaking() public {
         vm.startPrank(alice);
         dkt.approve(address(vault), 1000 ether);
-        vault.stake(1000 ether);
+        vault.stake(1000 ether, address(0), 0);
         vm.stopPrank();
 
         // Advance 30 days
@@ -250,7 +250,7 @@ contract StakingVaultTest is Test {
 
         vm.startPrank(alice);
         dkt.approve(address(vault), uint256(amount));
-        vault.stake(uint256(amount));
+        vault.stake(uint256(amount), address(0), 0);
         vm.stopPrank();
 
         assertEq(vault.stakedBalance(alice), uint256(amount));

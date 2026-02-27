@@ -152,7 +152,7 @@ contract GasBenchmark is Test {
      */
     function test_L2_Stake_DKT() public {
         vm.prank(alice);
-        vault.stake(STAKE_AMOUNT);
+        vault.stake(STAKE_AMOUNT, address(0), 0);
     }
 
     /**
@@ -161,7 +161,7 @@ contract GasBenchmark is Test {
      */
     function test_L2_Unstake_DKT() public {
         vm.prank(alice);
-        vault.stake(STAKE_AMOUNT);
+        vault.stake(STAKE_AMOUNT, address(0), 0);
 
         vm.warp(block.timestamp + 1); // lock period = 0 in tests
         vm.prank(alice);
@@ -180,13 +180,13 @@ contract GasBenchmark is Test {
             dkt.mint(user, 1000 ether);
             vm.startPrank(user);
             dkt.approve(address(vault), 1000 ether);
-            vault.stake(1000 ether);
+            vault.stake(1000 ether, address(0), 0);
             vm.stopPrank();
         }
 
         // Measure: alice stakes with 9 existing stakers
         vm.prank(alice);
-        vault.stake(STAKE_AMOUNT);
+        vault.stake(STAKE_AMOUNT, address(0), 0);
     }
 
     /**
@@ -208,7 +208,7 @@ contract GasBenchmark is Test {
      */
     function test_L3_ClaimYield() public {
         vm.prank(alice);
-        vault.stake(STAKE_AMOUNT);
+        vault.stake(STAKE_AMOUNT, address(0), 0);
 
         // Advance 30 days so yield accrues
         vm.warp(block.timestamp + 30 days);
@@ -223,7 +223,7 @@ contract GasBenchmark is Test {
      */
     function test_L3_AdvanceEpoch() public {
         vm.prank(alice);
-        vault.stake(STAKE_AMOUNT);
+        vault.stake(STAKE_AMOUNT, address(0), 0);
 
         vm.warp(block.timestamp + 1 hours + 1);
         vm.prank(admin);
@@ -326,7 +326,7 @@ contract GasBenchmark is Test {
      */
     function test_Scale_Stake_N1() public {
         vm.prank(alice);
-        vault.stake(100 ether);
+        vault.stake(100 ether, address(0), 0);
     }
 
     /**
@@ -336,7 +336,7 @@ contract GasBenchmark is Test {
     function test_Scale_Stake_N50() public {
         _setupStakers(50);
         vm.prank(alice);
-        vault.stake(100 ether);
+        vault.stake(100 ether, address(0), 0);
     }
 
     /**
@@ -346,7 +346,7 @@ contract GasBenchmark is Test {
     function test_Scale_Stake_N100() public {
         _setupStakers(100);
         vm.prank(alice);
-        vault.stake(100 ether);
+        vault.stake(100 ether, address(0), 0);
     }
 
     /**
@@ -354,7 +354,7 @@ contract GasBenchmark is Test {
      */
     function test_Scale_ClaimYield_N1() public {
         vm.prank(alice);
-        vault.stake(100 ether);
+        vault.stake(100 ether, address(0), 0);
         vm.warp(block.timestamp + 30 days);
         vm.prank(alice);
         dist.claimYield();
@@ -367,7 +367,7 @@ contract GasBenchmark is Test {
     function test_Scale_ClaimYield_N100() public {
         _setupStakers(100);
         vm.prank(alice);
-        vault.stake(100 ether);
+        vault.stake(100 ether, address(0), 0);
         vm.warp(block.timestamp + 30 days);
         vm.prank(alice);
         dist.claimYield();
@@ -381,7 +381,7 @@ contract GasBenchmark is Test {
             dkt.mint(user, 100 ether);
             vm.startPrank(user);
             dkt.approve(address(vault), 100 ether);
-            vault.stake(100 ether);
+            vault.stake(100 ether, address(0), 0);
             vm.stopPrank();
         }
     }

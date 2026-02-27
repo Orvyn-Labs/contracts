@@ -51,6 +51,12 @@ contract FundingPool is AccessControl, ReentrancyGuard {
         uint256 newPoolTotal,
         uint256 blockNumber
     );
+    event YieldRoutedToProject(
+        address indexed project,
+        address indexed staker,
+        uint256 amount,
+        uint256 blockNumber
+    );
     event AllocationMade(
         address indexed project,
         uint256 amount,
@@ -72,6 +78,9 @@ contract FundingPool is AccessControl, ReentrancyGuard {
 
     /// @notice Total cumulative yield received (analytics metric)
     uint256 public totalYieldReceived;
+
+    /// @notice Total cumulative yield routed directly to research projects
+    uint256 public totalYieldRoutedToProjects;
 
     /// @notice Per-project pending allocation (not yet withdrawn)
     mapping(address => uint256) public projectAllocations;
@@ -123,6 +132,29 @@ contract FundingPool is AccessControl, ReentrancyGuard {
         emit YieldReceived(source, msg.value, totalPool, block.number);
     }
 
+    /**
+     * @notice Accept yield routed from YieldDistributor directly to a specific project.
+     * @dev    Called by YieldDistributor.claimYield() when donateBps > 0.
+     *         Credits the yield immediately to the project's allocation rather than
+     *         the general pool — no admin step required.
+     * @param  project  ResearchProject address to credit
+     * @param  staker   Original staker address (for event indexing / analytics)
+     */
+    function receiveYieldForProject(address project, address staker)
+        external
+        payable
+        onlyRole(DEPOSITOR_ROLE)
+    {
+        if (msg.value == 0) revert ZeroAmount();
+        if (project == address(0)) revert ZeroAddress();
+
+        // Credit directly to the project's withdrawable allocation
+        projectAllocations[project] += msg.value;
+        totalYieldRoutedToProjects += msg.value;
+
+        emit YieldRoutedToProject(project, staker, msg.value, block.number);
+    }
+
     // ─── Allocation ───────────────────────────────────────────────────────────
     /**
      * @notice Allocate a portion of the pool to a specific research project.
@@ -172,6 +204,11 @@ contract FundingPool is AccessControl, ReentrancyGuard {
      * @notice Returns all top-level pool metrics in a single call.
      * @dev    Reduces RPC round-trips for the analytics dashboard.
      */
+    /// @notice Alias used by the analytics dashboard
+    function totalDonations() external view returns (uint256) { return totalDonationsReceived; }
+    function totalYieldDistributed() external view returns (uint256) { return totalYieldReceived + totalYieldRoutedToProjects; }
+    function projectBalance(address project) external view returns (uint256) { return projectAllocations[project]; }
+
     function poolMetrics()
         external
         view
@@ -182,7 +219,7 @@ contract FundingPool is AccessControl, ReentrancyGuard {
             uint256 balance
         )
     {
-        return (totalPool, totalDonationsReceived, totalYieldReceived, address(this).balance);
+        return (totalPool, totalDonationsReceived, totalYieldReceived + totalYieldRoutedToProjects, address(this).balance);
     }
 
     // ─── Receive ETH ─────────────────────────────────────────────────────────
