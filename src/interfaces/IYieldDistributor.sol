@@ -77,7 +77,7 @@ interface IYieldDistributor {
 
     function notifyUnstake(address user, uint256 amount) external;
     function claimYield() external returns (uint256 claimed);
-    function fundYieldPool() external payable;
+    function fundYieldPool(uint256 amount) external;
 
     // ─── Admin ────────────────────────────────────────────────────────────────
     function advanceEpoch() external;

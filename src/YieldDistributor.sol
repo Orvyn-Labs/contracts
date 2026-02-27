@@ -5,34 +5,23 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./interfaces/IYieldDistributor.sol";
 
 interface IFundingPoolYield {
-    function receiveYieldForProject(address project, address staker) external payable;
+    function receiveYieldForProject(address project, address staker, uint256 amount) external;
 }
 
 /**
  * @title YieldDistributor
- * @notice Simulates yield for staked DKT tokens and distributes it according to
- *         each staker's configured yield-split:
- *           - A configurable percentage (donateBps) is forwarded to a chosen
- *             ResearchProject via FundingPool.receiveYieldForProject()
- *           - The remainder is sent to the staker's wallet
+ * @notice Simulates yield for staked DKT tokens and distributes it in DKT.
  *
- * @dev COMPLEXITY LEVEL 3 — computation-heavy.
- *      Uses a global reward-index algorithm (O(1) per user) inspired by
- *      Compound's interest accrual model. No loops over staker sets.
+ *   claimYield() auto-split:
+ *     toProject = totalYield * donateBps / 10_000  → forwarded to FundingPool
+ *     toStaker  = totalYield - toProject            → transferred to msg.sender in DKT
  *
- *      Algorithm:
- *        rewardIndex grows continuously based on (yieldRateWAD * elapsed) / 1 year.
- *        Each user snapshots the index at stake/unstake time.
- *        Pending yield = stakedBalance * (currentIndex - userSnapshot) / WAD
- *
- *      claimYield() auto-split:
- *        toProject = totalYield * donateBps / 10_000   → forwarded to FundingPool
- *        toStaker  = totalYield - toProject             → sent to msg.sender
- *
- * Upgradeability: UUPS — allows swapping the yield algorithm between versions.
+ * Upgradeability: UUPS.
  */
 contract YieldDistributor is
     Initializable,
@@ -41,6 +30,8 @@ contract YieldDistributor is
     ReentrancyGuard,
     IYieldDistributor
 {
+    using SafeERC20 for IERC20;
+
     // ─── Roles ────────────────────────────────────────────────────────────────
     bytes32 public constant EPOCH_ADMIN_ROLE = keccak256("EPOCH_ADMIN_ROLE");
     bytes32 public constant YIELD_ADMIN_ROLE = keccak256("YIELD_ADMIN_ROLE");
@@ -57,7 +48,7 @@ contract YieldDistributor is
         uint256 lastUpdateTime;
         uint256 yieldRateWAD;
         uint256 totalStaked;
-        uint256 yieldPool;
+        uint256 yieldPool;          // DKT units
         uint256 currentEpoch;
         uint256 lastEpochTime;
         mapping(address => uint256) userStakedBalance;
@@ -65,7 +56,7 @@ contract YieldDistributor is
         mapping(uint256 => EpochInfo) epochData;
         address stakingVault;
         address fundingPool;
-        // Per-user yield-split config, set at stake time, locked until fully unstaked
+        address dkt;
         mapping(address => YieldSplit) userYieldSplit;
     }
 
@@ -82,8 +73,9 @@ contract YieldDistributor is
     }
 
     // ─── Initializer ─────────────────────────────────────────────────────────
-    function initialize(address admin, uint256 initialRateWAD) external initializer {
+    function initialize(address admin, uint256 initialRateWAD, address _dkt) external initializer {
         if (admin == address(0)) revert ZeroAddress();
+        if (_dkt == address(0)) revert ZeroAddress();
         if (initialRateWAD > MAX_YIELD_RATE_WAD) revert RateExceedsMax(initialRateWAD, MAX_YIELD_RATE_WAD);
 
         __AccessControl_init();
@@ -98,6 +90,7 @@ contract YieldDistributor is
         $.yieldRateWAD = initialRateWAD;
         $.lastEpochTime = block.timestamp;
         $.currentEpoch = 0;
+        $.dkt = _dkt;
     }
 
     // ─── Internal: Index update ───────────────────────────────────────────────
@@ -108,39 +101,27 @@ contract YieldDistributor is
             $.lastUpdateTime = block.timestamp;
             return;
         }
-
         uint256 delta = ($.yieldRateWAD * elapsed) / 365 days;
         $.rewardIndex += delta;
         $.lastUpdateTime = block.timestamp;
-
         emit RewardIndexUpdated($.rewardIndex, block.timestamp);
     }
 
-    // ─── Internal: Pending yield (view-safe) ─────────────────────────────────
+    // ─── Internal: Pending yield ──────────────────────────────────────────────
     function _computePendingYield(address user) internal view returns (uint256) {
         YieldDistributorStorage storage $ = _storage();
         uint256 balance = $.userStakedBalance[user];
         if (balance == 0) return 0;
-
         uint256 elapsed = block.timestamp - $.lastUpdateTime;
         uint256 projectedIndex = $.rewardIndex;
         if (elapsed > 0 && $.totalStaked > 0) {
             projectedIndex += ($.yieldRateWAD * elapsed) / 365 days;
         }
-
         uint256 indexDelta = projectedIndex - $.userIndexSnapshot[user];
         return (balance * indexDelta) / WAD;
     }
 
     // ─── StakingVault callbacks ───────────────────────────────────────────────
-
-    /**
-     * @notice Called by StakingVault when a user stakes DKT.
-     * @param user          The staker
-     * @param amount        DKT amount staked
-     * @param targetProject ResearchProject to receive donated yield (address(0) allowed if donateBps==0)
-     * @param donateBps     Basis points (0–10_000) of yield to route to the project
-     */
     function notifyStake(address user, uint256 amount, address targetProject, uint16 donateBps)
         external
         override
@@ -152,35 +133,25 @@ contract YieldDistributor is
         if (donateBps > 0 && targetProject == address(0)) revert ProjectRequired();
 
         _accrueIndex();
-
         $.userIndexSnapshot[user] = $.rewardIndex;
         $.userStakedBalance[user] += amount;
         $.totalStaked += amount;
 
-        // Lock the split config (only update if this is their first/re-stake from zero)
         if ($.userStakedBalance[user] == amount) {
-            // Fresh stake (was zero before) — set new split
             $.userYieldSplit[user] = YieldSplit({ targetProject: targetProject, donateBps: donateBps });
         }
-        // If already staked (adding to existing position), split config remains unchanged
     }
 
-    /**
-     * @notice Called by StakingVault when a user unstakes DKT.
-     * @dev    Clears split config when balance reaches zero.
-     */
     function notifyUnstake(address user, uint256 amount) external override {
         YieldDistributorStorage storage $ = _storage();
         if (msg.sender != $.stakingVault) revert NotStakingVault();
         if (amount == 0) revert ZeroAmount();
 
         _accrueIndex();
-
         $.userIndexSnapshot[user] = $.rewardIndex;
         $.userStakedBalance[user] -= amount;
         $.totalStaked -= amount;
 
-        // Clear split config when fully unstaked
         if ($.userStakedBalance[user] == 0) {
             delete $.userYieldSplit[user];
         }
@@ -188,13 +159,9 @@ contract YieldDistributor is
 
     // ─── User: Claim yield ────────────────────────────────────────────────────
     /**
-     * @notice Claim all pending yield with automatic split:
-     *         - (donateBps / 10_000) fraction → forwarded to chosen ResearchProject via FundingPool
-     *         - remainder → sent to caller's wallet
-     *
-     * @dev If donateBps == 0 or targetProject == address(0), 100% goes to the staker.
-     *      If fundingPool is not set, the project share falls back to the staker.
-     * @return claimed Total yield claimed (staker portion + project portion)
+     * @notice Claim all pending yield in DKT with automatic split.
+     *         toProject = claimed * donateBps / 10_000  → FundingPool.receiveYieldForProject()
+     *         toStaker  = claimed - toProject            → DKT transfer to caller
      */
     function claimYield() external override nonReentrant returns (uint256 claimed) {
         YieldDistributorStorage storage $ = _storage();
@@ -205,11 +172,9 @@ contract YieldDistributor is
         if (claimed == 0) revert NothingToClaim();
         if (claimed > $.yieldPool) revert InsufficientYieldPool(claimed, $.yieldPool);
 
-        // EFFECTS — snapshot before any transfers
         $.userIndexSnapshot[msg.sender] = $.rewardIndex;
         $.yieldPool -= claimed;
 
-        // Calculate split
         YieldSplit memory split = $.userYieldSplit[msg.sender];
         uint256 toProject = 0;
         uint256 toStaker = claimed;
@@ -229,22 +194,23 @@ contract YieldDistributor is
             block.number
         );
 
-        // INTERACTIONS — transfers last (CEI)
+        IERC20 token = IERC20($.dkt);
+
         if (toStaker > 0) {
-            (bool ok,) = msg.sender.call{value: toStaker}("");
-            require(ok, "Staker ETH transfer failed");
+            token.safeTransfer(msg.sender, toStaker);
         }
 
-        if (toProject > 0) {
-            // Forward to FundingPool.receiveYieldForProject()
-            IFundingPoolYield($.fundingPool).receiveYieldForProject{value: toProject}(
+        if (toProject > 0 && $.fundingPool != address(0)) {
+            token.forceApprove($.fundingPool, toProject);
+            IFundingPoolYield($.fundingPool).receiveYieldForProject(
                 split.targetProject,
-                msg.sender
+                msg.sender,
+                toProject
             );
         }
     }
 
-    // ─── Admin: Epoch management ─────────────────────────────────────────────
+    // ─── Admin: Epoch ────────────────────────────────────────────────────────
     function advanceEpoch() external override onlyRole(EPOCH_ADMIN_ROLE) {
         YieldDistributorStorage storage $ = _storage();
 
@@ -276,13 +242,10 @@ contract YieldDistributor is
     // ─── Admin: Configuration ─────────────────────────────────────────────────
     function setYieldRate(uint256 newRateWAD) external override onlyRole(YIELD_ADMIN_ROLE) {
         if (newRateWAD > MAX_YIELD_RATE_WAD) revert RateExceedsMax(newRateWAD, MAX_YIELD_RATE_WAD);
-
         _accrueIndex();
-
         YieldDistributorStorage storage $ = _storage();
         uint256 old = $.yieldRateWAD;
         $.yieldRateWAD = newRateWAD;
-
         emit YieldRateUpdated(old, newRateWAD);
     }
 
@@ -293,10 +256,6 @@ contract YieldDistributor is
         emit StakingVaultSet(vault);
     }
 
-    /**
-     * @notice Set the FundingPool address for routing project yield donations.
-     * @dev    FundingPool must grant DEPOSITOR_ROLE to this contract.
-     */
     function setFundingPool(address fundingPool) external override onlyRole(DEFAULT_ADMIN_ROLE) {
         if (fundingPool == address(0)) revert ZeroAddress();
         YieldDistributorStorage storage $ = _storage();
@@ -304,11 +263,16 @@ contract YieldDistributor is
         emit FundingPoolSet(fundingPool);
     }
 
-    function fundYieldPool() external payable override {
-        if (msg.value == 0) revert ZeroAmount();
+    /**
+     * @notice Fund the yield pool with DKT tokens.
+     * @dev    Caller must approve this contract for `amount` DKT first.
+     */
+    function fundYieldPool(uint256 amount) external override {
+        if (amount == 0) revert ZeroAmount();
         YieldDistributorStorage storage $ = _storage();
-        $.yieldPool += msg.value;
-        emit YieldPoolFunded(msg.sender, msg.value);
+        IERC20($.dkt).safeTransferFrom(msg.sender, address(this), amount);
+        $.yieldPool += amount;
+        emit YieldPoolFunded(msg.sender, amount);
     }
 
     function withdrawUnclaimedYield(address to, uint256 amount)
@@ -320,11 +284,8 @@ contract YieldDistributor is
         if (to == address(0)) revert ZeroAddress();
         YieldDistributorStorage storage $ = _storage();
         if (amount > $.yieldPool) revert InsufficientYieldPool(amount, $.yieldPool);
-
         $.yieldPool -= amount;
-
-        (bool ok,) = to.call{value: amount}("");
-        require(ok, "ETH transfer failed");
+        IERC20($.dkt).safeTransfer(to, amount);
     }
 
     // ─── View functions ───────────────────────────────────────────────────────
@@ -356,36 +317,14 @@ contract YieldDistributor is
         return _storage().epochData[epoch];
     }
 
-    function stakingVault() external view returns (address) {
-        return _storage().stakingVault;
-    }
-
-    function getFundingPool() external view returns (address) {
-        return _storage().fundingPool;
-    }
-
-    function yieldRateWAD() external view returns (uint256) {
-        return _storage().yieldRateWAD;
-    }
-
-    function userStakedBalance(address user) external view returns (uint256) {
-        return _storage().userStakedBalance[user];
-    }
-
-    function userIndexSnapshot(address user) external view returns (uint256) {
-        return _storage().userIndexSnapshot[user];
-    }
+    function stakingVault() external view returns (address) { return _storage().stakingVault; }
+    function getFundingPool() external view returns (address) { return _storage().fundingPool; }
+    function getDkt() external view returns (address) { return _storage().dkt; }
+    function yieldRateWAD() external view returns (uint256) { return _storage().yieldRateWAD; }
+    function userStakedBalance(address user) external view returns (uint256) { return _storage().userStakedBalance[user]; }
+    function userIndexSnapshot(address user) external view returns (uint256) { return _storage().userIndexSnapshot[user]; }
 
     // ─── UUPS ─────────────────────────────────────────────────────────────────
     function _authorizeUpgrade(address newImplementation)
-        internal
-        override
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {}
-
-    receive() external payable {
-        YieldDistributorStorage storage $ = _storage();
-        $.yieldPool += msg.value;
-        emit YieldPoolFunded(msg.sender, msg.value);
-    }
+        internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 }

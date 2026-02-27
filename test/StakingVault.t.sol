@@ -28,9 +28,9 @@ contract StakingVaultTest is Test {
 
         // Deploy YieldDistributor via UUPS proxy
         distImpl = new YieldDistributor();
-        bytes memory distInit = abi.encodeCall(YieldDistributor.initialize, (admin, INITIAL_RATE));
+        bytes memory distInit = abi.encodeCall(YieldDistributor.initialize, (admin, INITIAL_RATE, address(dkt)));
         ERC1967Proxy distProxy = new ERC1967Proxy(address(distImpl), distInit);
-        dist = YieldDistributor(payable(address(distProxy)));
+        dist = YieldDistributor(address(distProxy));
 
         // Deploy StakingVault via UUPS proxy
         vaultImpl = new StakingVault();
@@ -51,10 +51,12 @@ contract StakingVaultTest is Test {
         dkt.mint(bob, MINT_AMOUNT);
         vm.stopPrank();
 
-        // Fund yield pool with 10 ETH
-        vm.deal(admin, 10 ether);
-        vm.prank(admin);
-        dist.fundYieldPool{value: 10 ether}();
+        // Fund yield pool with DKT
+        vm.startPrank(admin);
+        dkt.mint(admin, 100_000 ether);
+        dkt.approve(address(dist), 100_000 ether);
+        dist.fundYieldPool(100_000 ether);
+        vm.stopPrank();
     }
 
     // ─── Initialization ────────────────────────────────────────────────────────

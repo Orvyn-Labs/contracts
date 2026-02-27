@@ -12,13 +12,12 @@ import "../src/ProjectFactory.sol";
 
 /**
  * @title Deploy
- * @notice Full deployment script for the research crowdfunding system.
+ * @notice Full deployment script for the research crowdfunding system (DKT-everywhere v3).
+ *
+ * All amounts — donations, yield, refunds — are denominated in DKT (18 decimals).
+ * No native ETH is used in the protocol logic.
  *
  * Usage:
- *   # Local Anvil fork
- *   forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast -vvv
- *
- *   # Base Sepolia testnet
  *   forge script script/Deploy.s.sol \
  *     --rpc-url $BASE_SEPOLIA_RPC \
  *     --private-key $PRIVATE_KEY \
@@ -27,51 +26,39 @@ import "../src/ProjectFactory.sol";
  *     --verifier-url https://api-sepolia.basescan.org/api \
  *     --etherscan-api-key $BASESCAN_API_KEY \
  *     -vvv
- *
- * Deployment order (dependency graph):
- *   1. DiktiToken
- *   2. YieldDistributor implementation + UUPS proxy
- *   3. StakingVault implementation + UUPS proxy
- *   4. FundingPool
- *   5. ResearchProject implementation
- *   6. ProjectFactory (deploys UpgradeableBeacon internally)
- *   7. Wire: setStakingVault on YieldDistributor
- *   8. Wire: grant DEPOSITOR_ROLE + DEFAULT_ADMIN_ROLE to ProjectFactory on FundingPool
- *   9. (Optional) Fund yield pool with initial ETH
  */
 contract Deploy is Script {
-    // ─── Configuration (override via environment variables) ──────────────────
-    uint256 constant INITIAL_YIELD_RATE = 0.10e18;  // 10% APY
-    uint256 constant INITIAL_LOCK_PERIOD = 7 days;   // 7-day stake lock
-
-    // Initial ETH to fund the yield pool (set to 0 to skip)
-    uint256 constant INITIAL_YIELD_POOL_FUNDING = 0.1 ether;
+    uint256 constant INITIAL_YIELD_RATE    = 0.10e18;   // 10% APY
+    uint256 constant INITIAL_LOCK_PERIOD   = 7 days;
+    uint256 constant INITIAL_YIELD_POOL_DKT = 10_000 ether; // 10,000 DKT seed
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         address deployer = vm.addr(deployerPrivateKey);
 
-        console.log("=== Research Crowdfunding dApp Deployment ===");
-        console.log("Deployer:   ", deployer);
-        console.log("Chain ID:   ", block.chainid);
-        console.log("Block:      ", block.number);
-        console.log("Timestamp:  ", block.timestamp);
-        console.log("---------------------------------------------");
+        console.log("=== DChain Deployment (DKT-everywhere v3) ===");
+        console.log("Deployer:  ", deployer);
+        console.log("Chain ID:  ", block.chainid);
+        console.log("Block:     ", block.number);
 
         vm.startBroadcast(deployerPrivateKey);
 
         // ── 1. DiktiToken ────────────────────────────────────────────────────
         DiktiToken dkt = new DiktiToken(deployer);
-        console.log("DiktiToken (DKT):          ", address(dkt));
+        console.log("DiktiToken:                ", address(dkt));
+
+        // Mint deployer enough DKT to seed the yield pool + some for testing
+        dkt.mint(deployer, INITIAL_YIELD_POOL_DKT + 100_000 ether);
+        console.log("Minted to deployer:        ", INITIAL_YIELD_POOL_DKT + 100_000 ether);
 
         // ── 2. YieldDistributor (UUPS proxy) ─────────────────────────────────
         YieldDistributor distImpl = new YieldDistributor();
         bytes memory distInit = abi.encodeCall(
             YieldDistributor.initialize,
-            (deployer, INITIAL_YIELD_RATE)
+            (deployer, INITIAL_YIELD_RATE, address(dkt))
         );
         ERC1967Proxy distProxy = new ERC1967Proxy(address(distImpl), distInit);
-        YieldDistributor dist = YieldDistributor(payable(address(distProxy)));
+        YieldDistributor dist = YieldDistributor(address(distProxy));
         console.log("YieldDistributor impl:     ", address(distImpl));
         console.log("YieldDistributor proxy:    ", address(dist));
 
@@ -87,53 +74,41 @@ contract Deploy is Script {
         console.log("StakingVault proxy:        ", address(vault));
 
         // ── 4. FundingPool ────────────────────────────────────────────────────
-        FundingPool fundingPool = new FundingPool(deployer);
+        FundingPool fundingPool = new FundingPool(deployer, address(dkt));
         console.log("FundingPool:               ", address(fundingPool));
 
         // ── 5. ResearchProject implementation ────────────────────────────────
         ResearchProject projectImpl = new ResearchProject();
         console.log("ResearchProject impl:      ", address(projectImpl));
 
-        // ── 6. ProjectFactory (creates UpgradeableBeacon internally) ─────────
+        // ── 6. ProjectFactory ─────────────────────────────────────────────────
         ProjectFactory factory = new ProjectFactory(
             deployer,
             address(projectImpl),
-            payable(address(fundingPool))
+            payable(address(fundingPool)),
+            address(dkt)
         );
         console.log("ProjectFactory:            ", address(factory));
         console.log("UpgradeableBeacon:         ", address(factory.beacon()));
 
         // ── 7. Wire: StakingVault → YieldDistributor ──────────────────────────
         dist.setStakingVault(address(vault));
-        console.log("YieldDistributor.stakingVault set to:", address(vault));
 
         // ── 8. Wire: FundingPool roles ────────────────────────────────────────
-        // ProjectFactory needs DEFAULT_ADMIN_ROLE on FundingPool to grant DEPOSITOR_ROLE
-        // to each newly deployed ResearchProject
         fundingPool.grantRole(fundingPool.DEFAULT_ADMIN_ROLE(), address(factory));
-        console.log("FundingPool: DEFAULT_ADMIN_ROLE granted to factory");
-
-        // YieldDistributor needs DEPOSITOR_ROLE to call receiveYieldForProject()
         fundingPool.grantRole(fundingPool.DEPOSITOR_ROLE(), address(dist));
-        console.log("FundingPool: DEPOSITOR_ROLE granted to YieldDistributor");
-
-        // Wire FundingPool address into YieldDistributor
         dist.setFundingPool(address(fundingPool));
-        console.log("YieldDistributor.fundingPool set to:", address(fundingPool));
 
-        // ── 9. (Optional) Fund yield pool ────────────────────────────────────
-        if (INITIAL_YIELD_POOL_FUNDING > 0 && deployer.balance >= INITIAL_YIELD_POOL_FUNDING) {
-            dist.fundYieldPool{value: INITIAL_YIELD_POOL_FUNDING}();
-            console.log("YieldPool funded with:     ", INITIAL_YIELD_POOL_FUNDING);
-        }
+        // ── 9. Approve + fund yield pool with DKT ────────────────────────────
+        dkt.approve(address(dist), INITIAL_YIELD_POOL_DKT);
+        dist.fundYieldPool(INITIAL_YIELD_POOL_DKT);
+        console.log("YieldPool funded with DKT: ", INITIAL_YIELD_POOL_DKT);
 
         vm.stopBroadcast();
 
-        // ── Summary ──────────────────────────────────────────────────────────
         console.log("---------------------------------------------");
         console.log("=== DEPLOYMENT COMPLETE ===");
-        console.log("");
-        console.log("Copy these addresses to your .env / frontend config:");
+        console.log("Copy to .env.local:");
         console.log("NEXT_PUBLIC_DKT_ADDRESS=",            address(dkt));
         console.log("NEXT_PUBLIC_YIELD_DISTRIBUTOR=",      address(dist));
         console.log("NEXT_PUBLIC_STAKING_VAULT=",          address(vault));

@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/proxy/beacon/BeaconProxy.sol";
 import "@openzeppelin/contracts/proxy/beacon/UpgradeableBeacon.sol";
 import "./ResearchProject.sol";
 import "./FundingPool.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title ProjectFactory
@@ -61,6 +62,9 @@ contract ProjectFactory is AccessControl {
     /// @notice The FundingPool that all projects route funds to
     FundingPool public immutable fundingPool;
 
+    /// @notice The DKT token used for donations
+    IERC20 public immutable dkt;
+
     /// @notice Ordered list of all deployed project addresses
     address[] public allProjects;
 
@@ -76,19 +80,20 @@ contract ProjectFactory is AccessControl {
     constructor(
         address admin,
         address researchProjectImpl,
-        address payable _fundingPool
+        address payable _fundingPool,
+        address _dkt
     ) {
         if (admin == address(0)) revert ZeroAddress();
         if (researchProjectImpl == address(0)) revert ZeroAddress();
         if (_fundingPool == address(0)) revert ZeroAddress();
+        if (_dkt == address(0)) revert ZeroAddress();
 
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(FACTORY_ADMIN_ROLE, admin);
 
-        // Deploy beacon — factory owns the beacon; upgrades go through factory.upgradeBeacon()
-        // which is guarded by DEFAULT_ADMIN_ROLE.
         beacon = new UpgradeableBeacon(researchProjectImpl, address(this));
         fundingPool = FundingPool(payable(_fundingPool));
+        dkt = IERC20(_dkt);
     }
 
     // ─── Core: Create project ─────────────────────────────────────────────────
@@ -118,6 +123,7 @@ contract ProjectFactory is AccessControl {
             (
                 msg.sender,               // researcher
                 address(fundingPool),     // fundingPool
+                address(dkt),             // dkt token
                 title,
                 goalAmount,
                 duration
