@@ -16,6 +16,11 @@ import "../../src/ProjectFactory.sol";
  * @title GasBenchmark
  * @notice Gas measurement tests — all operations use DKT (no ETH).
  *         Run with: forge test --match-contract GasBenchmark --gas-report -vvv
+ *
+ * @dev Updated for milestone-based ResearchProject:
+ *      - createProject() now takes (title, string[], uint256[], uint256[])
+ *      - No more finalize() — replaced by submitProof() + vote() + finalizeMilestone()
+ *      - claimRefund() now takes milestoneIdx argument
  */
 contract GasBenchmark is Test {
     DiktiToken public dkt;
@@ -35,6 +40,23 @@ contract GasBenchmark is Test {
     uint256 constant GOAL            = 5_000 ether;
     uint256 constant DURATION        = 30 days;
     uint256 constant YIELD_SEED      = 100_000 ether;
+
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+
+    function _singleMilestoneTitles() internal pure returns (string[] memory t) {
+        t = new string[](1);
+        t[0] = "Milestone 1";
+    }
+
+    function _singleMilestoneGoals() internal pure returns (uint256[] memory g) {
+        g = new uint256[](1);
+        g[0] = GOAL;
+    }
+
+    function _singleMilestoneDurations() internal pure returns (uint256[] memory d) {
+        d = new uint256[](1);
+        d[0] = DURATION;
+    }
 
     function setUp() public {
         // 1. DiktiToken
@@ -81,9 +103,14 @@ contract GasBenchmark is Test {
         vm.prank(alice); dkt.approve(address(vault), type(uint256).max);
         vm.prank(bob);   dkt.approve(address(vault), type(uint256).max);
 
-        // Create one project for donation tests
+        // Create one project for donation tests (single milestone)
         vm.prank(researcher);
-        address projectAddr = factory.createProject("Quantum Computing Research", GOAL, DURATION);
+        address projectAddr = factory.createProject(
+            "Quantum Computing Research",
+            _singleMilestoneTitles(),
+            _singleMilestoneGoals(),
+            _singleMilestoneDurations()
+        );
         project = ResearchProject(payable(projectAddr));
 
         // Pre-approve project for alice/bob donations
@@ -106,20 +133,20 @@ contract GasBenchmark is Test {
         dkt.transfer(bob, 100 ether);
     }
 
-    /// @notice L1-C: Direct DKT donation to research project
+    /// @notice L1-C: Direct DKT donation to research project (current milestone)
     function test_L1_Donate_ToProject() public {
         vm.prank(alice);
         project.donate(DONATION_AMOUNT);
     }
 
-    /// @notice L1-D: Donate that triggers GoalReached event
-    function test_L1_Donate_TriggerGoalReached() public {
+    /// @notice L1-D: Multiple donations to current milestone
+    function test_L1_Donate_Multiple() public {
         vm.prank(alice);
         project.donate(2000 ether);
         vm.prank(bob);
         project.donate(2000 ether);
         vm.prank(alice);
-        project.donate(1000 ether); // crosses threshold
+        project.donate(1000 ether);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -159,6 +186,26 @@ contract GasBenchmark is Test {
         dkt.approve(spender, 1000 ether);
     }
 
+    /// @notice L2-C: Submit milestone proof (after deadline, with donations)
+    function test_L2_SubmitProof() public {
+        vm.prank(alice);
+        project.donate(1000 ether);
+        vm.warp(block.timestamp + DURATION + 1);
+        vm.prank(researcher);
+        project.submitProof("ipfs://QmBenchmarkProof");
+    }
+
+    /// @notice L2-D: Vote on a milestone
+    function test_L2_Vote_OnMilestone() public {
+        vm.prank(alice);
+        project.donate(DONATION_AMOUNT);
+        vm.warp(block.timestamp + DURATION + 1);
+        vm.prank(researcher);
+        project.submitProof("ipfs://QmProof");
+        vm.prank(alice);
+        project.vote(true); // alice is 100% weight → auto-approves
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // COMPLEXITY LEVEL 3 — High
     // ═══════════════════════════════════════════════════════════════════════════
@@ -179,18 +226,31 @@ contract GasBenchmark is Test {
         dist.advanceEpoch();
     }
 
-    /// @notice L3-C: Finalize project (success path) — DKT routed to FundingPool
-    function test_L3_Finalize_ProjectSuccess() public {
+    /// @notice L3-C: Full milestone approval — donate → proof → vote → auto-approve
+    ///         DKT transferred directly to researcher on approval.
+    function test_L3_FinalizeMilestone_Approved() public {
         vm.prank(alice);
         project.donate(GOAL);
-        project.finalize();
+
+        vm.warp(block.timestamp + DURATION + 1);
+        vm.prank(researcher);
+        project.submitProof("ipfs://QmProof");
+
+        vm.prank(alice);
+        project.vote(true); // 100% weight → auto-approve
     }
 
-    function test_L3_Finalize_ProjectFailed() public {
+    /// @notice L3-D: Milestone rejection path — donate → proof → vote NO → auto-reject
+    function test_L3_FinalizeMilestone_Rejected() public {
         vm.prank(alice);
         project.donate(1000 ether);
+
         vm.warp(block.timestamp + DURATION + 1);
-        project.finalize();
+        vm.prank(researcher);
+        project.submitProof("ipfs://QmProof");
+
+        vm.prank(alice);
+        project.vote(false); // 100% weight → auto-reject
     }
 
     /// @notice L3-E: Fund yield pool with DKT (ERC-20 transferFrom + SSTORE)
@@ -201,22 +261,70 @@ contract GasBenchmark is Test {
         dist.fundYieldPool(5000 ether);
     }
 
+    /// @notice L3-F: Donor claims refund from rejected milestone
     function test_L3_ClaimRefund() public {
         vm.prank(alice);
         project.donate(1000 ether);
+
         vm.warp(block.timestamp + DURATION + 1);
-        project.finalize();
+        vm.prank(researcher);
+        project.submitProof("ipfs://QmProof");
+
         vm.prank(alice);
-        project.claimRefund();
+        project.vote(false); // auto-reject
+
+        vm.prank(alice);
+        project.claimRefund(0); // milestoneIdx = 0
+    }
+
+    /// @notice L3-G: Full milestone approval path — DKT transferred directly to researcher on approval
+    function test_L3_ApproveMilestone_DirectTransfer() public {
+        vm.prank(alice);
+        project.donate(GOAL);
+
+        vm.warp(block.timestamp + DURATION + 1);
+        vm.prank(researcher);
+        project.submitProof("ipfs://QmProof");
+
+        // Vote approves → DKT immediately sent to researcher (no separate withdraw needed)
+        vm.prank(alice);
+        project.vote(true); // 100% weight → auto-approve → direct transfer
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // COMPLEXITY LEVEL 4 — Contract creation
     // ═══════════════════════════════════════════════════════════════════════════
 
-    function test_L4_CreateProject_ViaFactory() public {
+    /// @notice L4-A: Deploy new project (single milestone) via factory
+    function test_L4_CreateProject_SingleMilestone() public {
         vm.prank(researcher);
-        factory.createProject("New Climate Research Project", 10_000 ether, 60 days);
+        factory.createProject(
+            "New Climate Research Project",
+            _singleMilestoneTitles(),
+            _singleMilestoneGoals(),
+            _singleMilestoneDurations()
+        );
+    }
+
+    /// @notice L4-B: Deploy new project with 3 milestones via factory
+    function test_L4_CreateProject_ThreeMilestones() public {
+        string[] memory titles = new string[](3);
+        titles[0] = "Phase 1";
+        titles[1] = "Phase 2";
+        titles[2] = "Phase 3";
+
+        uint256[] memory goals = new uint256[](3);
+        goals[0] = 1_000 ether;
+        goals[1] = 2_000 ether;
+        goals[2] = 3_000 ether;
+
+        uint256[] memory durs = new uint256[](3);
+        durs[0] = 30 days;
+        durs[1] = 30 days;
+        durs[2] = 30 days;
+
+        vm.prank(researcher);
+        factory.createProject("Three-Phase Research", titles, goals, durs);
     }
 
     function test_L4_Upgrade_StakingVault() public {
@@ -273,6 +381,39 @@ contract GasBenchmark is Test {
         vm.warp(block.timestamp + 30 days);
         vm.prank(alice);
         dist.claimYield();
+    }
+
+    /// @notice Scale: multiple donors voting on same milestone
+    function test_Scale_Vote_N10Donors() public {
+        // Create a fresh project for this test
+        vm.prank(researcher);
+        address projectAddr = factory.createProject(
+            "Scale Vote Project",
+            _singleMilestoneTitles(),
+            _singleMilestoneGoals(),
+            _singleMilestoneDurations()
+        );
+        ResearchProject p = ResearchProject(payable(projectAddr));
+
+        // 10 donors each donate 100 DKT
+        for (uint256 i = 0; i < 10; i++) {
+            address donor = makeAddr(string(abi.encodePacked("voter", i)));
+            vm.prank(admin);
+            dkt.mint(donor, 100 ether);
+            vm.startPrank(donor);
+            dkt.approve(address(p), 100 ether);
+            p.donate(100 ether);
+            vm.stopPrank();
+        }
+
+        vm.warp(block.timestamp + DURATION + 1);
+        vm.prank(researcher);
+        p.submitProof("ipfs://ScaleProof");
+
+        // 10th vote is the measured one
+        address lastDonor = makeAddr(string(abi.encodePacked("voter", uint256(9))));
+        vm.prank(lastDonor);
+        p.vote(true);
     }
 
     function _setupStakers(uint256 n) internal {

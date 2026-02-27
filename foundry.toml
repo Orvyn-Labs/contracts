@@ -7,7 +7,7 @@ script = "script"
 cache = true
 optimizer = true
 optimizer_runs = 200
-via_ir = false
+via_ir = true
 solc_version = "0.8.24"
 
 # Remappings

@@ -34,7 +34,6 @@ contract ProjectFactory is AccessControl {
 
     // ─── Errors ───────────────────────────────────────────────────────────────
     error ZeroAddress();
-    error ZeroAmount();
     error EmptyTitle();
     error DurationTooShort(uint256 provided, uint256 minimum);
     error DurationTooLong(uint256 provided, uint256 maximum);
@@ -102,47 +101,51 @@ contract ProjectFactory is AccessControl {
      * @dev    Any address can create a project (permissionless).
      *         The caller becomes the `researcher` of the deployed project.
      *
-     * @param  title      Project title (human-readable, stored on-chain)
-     * @param  goalAmount Funding goal in wei
-     * @param  duration   Duration in seconds (MIN_DURATION ≤ duration ≤ MAX_DURATION)
-     * @return projectAddr Address of the deployed ResearchProject proxy
+     * @param  title               Project title
+     * @param  milestoneTitles     Array of milestone titles
+     * @param  milestoneGoals      Array of milestone DKT goals (informational)
+     * @param  milestoneDurations  Array of milestone durations in seconds
+     * @return projectAddr         Address of the deployed ResearchProject proxy
      */
     function createProject(
         string calldata title,
-        uint256 goalAmount,
-        uint256 duration
+        string[] calldata milestoneTitles,
+        uint256[] calldata milestoneGoals,
+        uint256[] calldata milestoneDurations
     ) external returns (address projectAddr) {
         if (bytes(title).length == 0) revert EmptyTitle();
-        if (goalAmount == 0) revert ZeroAmount();
-        if (duration < MIN_DURATION) revert DurationTooShort(duration, MIN_DURATION);
-        if (duration > MAX_DURATION) revert DurationTooLong(duration, MAX_DURATION);
+        require(milestoneTitles.length > 0, "Need at least one milestone");
+        require(
+            milestoneTitles.length == milestoneGoals.length &&
+            milestoneGoals.length == milestoneDurations.length,
+            "Milestone array length mismatch"
+        );
+        for (uint256 i = 0; i < milestoneDurations.length; i++) {
+            if (milestoneDurations[i] < MIN_DURATION) revert DurationTooShort(milestoneDurations[i], MIN_DURATION);
+            if (milestoneDurations[i] > MAX_DURATION) revert DurationTooLong(milestoneDurations[i], MAX_DURATION);
+        }
 
-        // Encode the initializer call for the BeaconProxy constructor
         bytes memory initData = abi.encodeCall(
             ResearchProject.initialize,
             (
-                msg.sender,               // researcher
-                address(fundingPool),     // fundingPool
-                address(dkt),             // dkt token
+                msg.sender,
+                address(fundingPool),
+                address(dkt),
                 title,
-                goalAmount,
-                duration
+                milestoneTitles,
+                milestoneGoals,
+                milestoneDurations
             )
         );
 
-        // Deploy BeaconProxy — delegates to beacon's current implementation
         BeaconProxy proxy = new BeaconProxy(address(beacon), initData);
         projectAddr = address(proxy);
 
-        // Register the new project
         allProjects.push(projectAddr);
         projectsByResearcher[msg.sender].push(projectAddr);
 
-        // Read projectId from the deployed contract for the event
         bytes32 pid = ResearchProject(payable(projectAddr)).projectId();
-        uint256 dl = ResearchProject(payable(projectAddr)).deadline();
 
-        // Grant the new project DEPOSITOR_ROLE on FundingPool
         fundingPool.grantRole(fundingPool.DEPOSITOR_ROLE(), projectAddr);
 
         emit ProjectCreated(
@@ -150,8 +153,8 @@ contract ProjectFactory is AccessControl {
             msg.sender,
             pid,
             title,
-            goalAmount,
-            dl,
+            0,
+            0,
             block.number
         );
     }

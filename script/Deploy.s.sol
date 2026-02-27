@@ -104,6 +104,30 @@ contract Deploy is Script {
         dist.fundYieldPool(INITIAL_YIELD_POOL_DKT);
         console.log("YieldPool funded with DKT: ", INITIAL_YIELD_POOL_DKT);
 
+        // ── 10. Create a sample milestone project for testing ─────────────────
+        string[] memory msTitle = new string[](3);
+        msTitle[0] = "Literature Review & Proposal";
+        msTitle[1] = "Data Collection & Analysis";
+        msTitle[2] = "Final Report & Publication";
+
+        uint256[] memory msGoal = new uint256[](3);
+        msGoal[0] = 1_000 ether;
+        msGoal[1] = 2_000 ether;
+        msGoal[2] = 2_000 ether;
+
+        uint256[] memory msDuration = new uint256[](3);
+        msDuration[0] = 7 days;
+        msDuration[1] = 14 days;
+        msDuration[2] = 14 days;
+
+        address sampleProject = factory.createProject(
+            "AI-Driven Research Analytics on Blockchain",
+            msTitle,
+            msGoal,
+            msDuration
+        );
+        console.log("Sample project:            ", sampleProject);
+
         vm.stopBroadcast();
 
         console.log("---------------------------------------------");
