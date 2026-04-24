@@ -9,7 +9,7 @@ contract DeployWithGas is Script {
         vm.startBroadcast();
 
         // Deploy with explicit high gas
-        PureToken token = new PureToken{gas: 3000000}(1000000 * 10**18);
+        PureToken token = new PureToken(1000000 * 10**18);
 
         console.log("PureToken deployed at:", address(token));
 
