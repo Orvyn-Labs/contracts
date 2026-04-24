@@ -1,0 +1,27 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "ShortStrings",
+  "sourceName": "@openzeppelin/contracts/utils/ShortStrings.sol",
+  "abi": [
+    {
+      "inputs": [],
+      "name": "InvalidShortString",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "str",
+          "type": "string"
+        }
+      ],
+      "name": "StringTooLong",
+      "type": "error"
+    }
+  ],
+  "bytecode": "0x60808060405234601757603a9081601d823930815050f35b600080fdfe600080fdfea26469706673582212206f361548499cb8190b37b6a1e29ad571980b5f1119c1d2cf7c4e9853ef16157864736f6c63430008180033",
+  "deployedBytecode": "0x600080fdfea26469706673582212206f361548499cb8190b37b6a1e29ad571980b5f1119c1d2cf7c4e9853ef16157864736f6c63430008180033",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

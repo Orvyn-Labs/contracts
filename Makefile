@@ -7,9 +7,11 @@
 -include .env
 export
 
+RPC_DCHAIN        ?= https://mainnet.dchain.id
 RPC_BASE_SEPOLIA  ?= https://base-sepolia.drpc.org
 RPC_BASE          ?= https://base.drpc.org
-VERIFIER_URL      := https://api.etherscan.io/v2/api?chainid=84532
+VERIFIER_URL_DCHAIN    := https://dchain.id/explorer/api
+VERIFIER_URL_SEPOLIA   := https://api.etherscan.io/v2/api?chainid=84532
 
 # ── Build & Test ─────────────────────────────────────────────
 
@@ -39,6 +41,27 @@ deploy-local:
 		--broadcast \
 		-vvv
 
+# ── DChain Deployment (Production) ────────────────────────
+
+deploy-dchain:
+	@echo "Deploying to DChain Mainnet (Chain ID: 17845)..."
+	forge script script/Deploy.s.sol \
+		--rpc-url $(RPC_DCHAIN) \
+		--private-key $(PRIVATE_KEY) \
+		--broadcast \
+		-vvv
+
+deploy-dchain-verify:
+	@echo "Deploying to DChain Mainnet with verification..."
+	forge script script/Deploy.s.sol \
+		--rpc-url $(RPC_DCHAIN) \
+		--private-key $(PRIVATE_KEY) \
+		--broadcast \
+		--verify \
+		--verifier-url $(VERIFIER_URL_DCHAIN) \
+		--etherscan-api-key $(DCHAIN_API_KEY) \
+		-vvv
+
 # ── Base Sepolia Deployment ───────────────────────────────────
 
 deploy-sepolia:
@@ -57,7 +80,7 @@ deploy-sepolia-verify:
 		--private-key $(PRIVATE_KEY) \
 		--broadcast \
 		--verify \
-		--verifier-url $(VERIFIER_URL) \
+		--verifier-url $(VERIFIER_URL_SEPOLIA) \
 		--etherscan-api-key $(BASESCAN_API_KEY) \
 		-vvv
 
@@ -67,7 +90,7 @@ deploy-sepolia-verify:
 verify-contract:
 	forge verify-contract $(ADDRESS) src/tokens/$(CONTRACT).sol:$(CONTRACT) \
 		--rpc-url $(RPC_BASE_SEPOLIA) \
-		--verifier-url $(VERIFIER_URL) \
+		--verifier-url $(VERIFIER_URL_SEPOLIA) \
 		--etherscan-api-key $(BASESCAN_API_KEY) \
 		--watch
 
@@ -75,7 +98,7 @@ verify-contract:
 verify-proxy:
 	forge verify-contract $(ADDRESS) lib/openzeppelin-contracts/contracts/proxy/ERC1967/ERC1967Proxy.sol:ERC1967Proxy \
 		--rpc-url $(RPC_BASE_SEPOLIA) \
-		--verifier-url $(VERIFIER_URL) \
+		--verifier-url $(VERIFIER_URL_SEPOLIA) \
 		--etherscan-api-key $(BASESCAN_API_KEY) \
 		--watch
 
@@ -91,5 +114,6 @@ size:
 	forge build --sizes
 
 .PHONY: build test test-gas snapshot clean anvil \
-        deploy-local deploy-sepolia deploy-sepolia-verify \
+        deploy-local deploy-dchain deploy-dchain-verify \
+        deploy-sepolia deploy-sepolia-verify \
         verify-contract verify-proxy format lint size

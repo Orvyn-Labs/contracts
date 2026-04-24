@@ -1,0 +1,10 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "Empty",
+  "sourceName": "src/Empty.sol",
+  "abi": [],
+  "bytecode": "0x60808060405234601357603a908160198239f35b600080fdfe600080fdfea2646970667358221220c55f908bddf65a6c556c3b5c00b3ef9cab729a82c608e46a6bed90789e57921864736f6c63430008180033",
+  "deployedBytecode": "0x600080fdfea2646970667358221220c55f908bddf65a6c556c3b5c00b3ef9cab729a82c608e46a6bed90789e57921864736f6c63430008180033",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

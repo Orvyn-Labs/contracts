@@ -36,10 +36,12 @@ bracket_spacing = true
 
 # RPC endpoints
 [rpc_endpoints]
+dchain       = "https://mainnet.dchain.id"
 base_sepolia = "https://base-sepolia.drpc.org"
 base         = "https://base.drpc.org"
 
 # Contract verification
 [etherscan]
+dchain       = { key = "${DCHAIN_API_KEY}", url = "https://dchain.id/explorer/api" }
 base_sepolia = { key = "${BASESCAN_API_KEY}", url = "https://api.etherscan.io/v2/api?chainid=84532" }
 base         = { key = "${BASESCAN_API_KEY}", url = "https://api.etherscan.io/v2/api?chainid=8453" }

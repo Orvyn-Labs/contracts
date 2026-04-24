@@ -15,17 +15,20 @@ import "../src/ProjectFactory.sol";
  * @notice Full deployment script for the research crowdfunding system (DKT-everywhere v3).
  *
  * All amounts — donations, yield, refunds — are denominated in DKT (18 decimals).
- * No native ETH is used in the protocol logic.
+ * No native DCoin is used in the protocol logic (only DKT token).
  *
- * Usage:
+ * Usage (DChain Mainnet):
  *   forge script script/Deploy.s.sol \
- *     --rpc-url $BASE_SEPOLIA_RPC \
+ *     --rpc-url https://mainnet.dchain.id \
  *     --private-key $PRIVATE_KEY \
  *     --broadcast \
  *     --verify \
- *     --verifier-url https://api-sepolia.basescan.org/api \
- *     --etherscan-api-key $BASESCAN_API_KEY \
+ *     --verifier-url https://dchain.id/explorer/api \
+ *     --etherscan-api-key $DCHAIN_API_KEY \
  *     -vvv
+ *
+ * Or use the Makefile:
+ *   make deploy-dchain
  */
 contract Deploy is Script {
     uint256 constant INITIAL_YIELD_RATE    = 0.10e18;   // 10% APY
@@ -42,6 +45,9 @@ contract Deploy is Script {
         console.log("Block:     ", block.number);
 
         vm.startBroadcast(deployerPrivateKey);
+
+        // Set higher gas limit for DChain
+        vm.txGasPrice(1500000008); // Match DChain gas price
 
         // ── 1. DiktiToken ────────────────────────────────────────────────────
         DiktiToken dkt = new DiktiToken(deployer);
