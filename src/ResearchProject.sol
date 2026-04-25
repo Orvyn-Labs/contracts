@@ -225,12 +225,12 @@ contract ResearchProject is Initializable, ReentrancyGuard {
     /**
      * @notice Researcher submits an IPFS URI as proof of milestone completion.
      *         This moves the milestone into Voting state, enabling donor votes.
-     * @dev    Can only be called after the milestone deadline has passed.
+     * @dev    Allowed when milestone goal is fully raised OR deadline has passed.
      */
     function submitProof(string calldata proofUri) external onlyResearcher onlyProjectActive {
         Milestone storage ms = milestones[currentMilestoneIndex];
         if (ms.status != MilestoneStatus.Pending) revert NotActive();
-        if (block.timestamp <= ms.deadline) revert DeadlineNotReached();
+        if (block.timestamp <= ms.deadline && ms.raised < ms.goal) revert DeadlineNotReached();
         if (ms.raised == 0) revert ZeroAmount(); // no donations — use skipMilestone
         if (bytes(ms.proofUri).length > 0) revert ProofAlreadySubmitted();
 
