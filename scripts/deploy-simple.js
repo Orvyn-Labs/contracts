@@ -47,21 +47,30 @@ async function main() {
   // Initialize them
   console.log("\n   Initializing StakingVault...");
   const lockPeriod = 7 * 24 * 60 * 60; // 7 days in seconds
-  await stakingVault.initialize(deployer.address, dktAddr, yieldDistAddr, lockPeriod);
+  await stakingVault.initialize(deployer.address, dktAddr, yieldDistAddr, lockPeriod, opts);
   console.log("   ✓ StakingVault initialized");
 
   console.log("   Initializing YieldDistributor...");
   const initialYieldRate = hre.ethers.parseEther("0.1"); // 10% initial yield rate
-  await yieldDist.initialize(deployer.address, initialYieldRate, dktAddr);
+  await yieldDist.initialize(deployer.address, initialYieldRate, dktAddr, opts);
   console.log("   ✓ YieldDistributor initialized");
 
-  // 5. ProjectFactory
-  console.log("\n5. Deploying ProjectFactory...");
+  // 5. ResearchProject implementation
+  console.log("\n5. Deploying ResearchProject implementation...");
+  const ResearchProject = await hre.ethers.getContractFactory("ResearchProject");
+  const researchProjectImpl = await ResearchProject.deploy(opts);
+  await researchProjectImpl.waitForDeployment();
+  const implAddr = await researchProjectImpl.getAddress();
+  console.log("✅ ResearchProject impl:", implAddr);
+
+  // 6. ProjectFactory
+  console.log("\n6. Deploying ProjectFactory...");
   const ProjectFactory = await hre.ethers.getContractFactory("ProjectFactory");
   const factory = await ProjectFactory.deploy(
+    deployer.address,
+    implAddr,
     fundingPoolAddr,
-    stakingVaultAddr,
-    yieldDistAddr,
+    dktAddr,
     opts
   );
   await factory.waitForDeployment();
