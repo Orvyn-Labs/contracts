@@ -1,0 +1,303 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "DKTFaucet",
+  "sourceName": "src/DKTFaucet.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_dkt",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_admin",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "nextClaimTime",
+          "type": "uint256"
+        }
+      ],
+      "name": "AlreadyClaimed",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnableInvalidOwner",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "OwnableUnauthorizedAccount",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ZeroAddress",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "oldAmount",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "newAmount",
+          "type": "uint256"
+        }
+      ],
+      "name": "ClaimAmountUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "Claimed",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "oldCooldown",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "newCooldown",
+          "type": "uint256"
+        }
+      ],
+      "name": "CooldownUpdated",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        }
+      ],
+      "name": "canClaim",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "claim",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "claimAmount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "cooldown",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "dkt",
+      "outputs": [
+        {
+          "internalType": "contract IDiktiToken",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "name": "lastClaim",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        }
+      ],
+      "name": "nextClaimTime",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "setClaimAmount",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "_cooldown",
+          "type": "uint256"
+        }
+      ],
+      "name": "setCooldown",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x60a03461010d57601f61070b38819003918201601f19168301916001600160401b0383118484101761011257808492604094855283398101031261010d57602061004882610128565b916001600160a01b0391829161005e9101610128565b169182156100f457600080546001600160a01b03198116851782556040519491908416907f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e09080a369021e19e0c9bab2400000600155610e10600255169081156100e557506080526040516105ce908161013d82396080518181816101e401526103dd0152f35b63d92e233d60e01b8152600490fd5b604051631e4fbdf760e01b815260006004820152602490fd5b600080fd5b634e487b7160e01b600052604160045260246000fd5b51906001600160a01b038216820361010d5756fe60406080815260048036101561001457600080fd5b600091823560e01c80634e71d92d1461039d5780634fc3f41a146103495780635c16e15e1461030f57806370f23da7146102d7578063715018a61461027d578063787a08a61461025e578063830953ab1461023f5780638da5cb5b14610217578063b0efe5d8146101cf578063b1c7ef0c1461017b578063bf3506c11461013e5763f2fde38b146100a457600080fd5b3461013a57602036600319011261013a576001600160a01b03823581811693919290849003610136576100d561056c565b8315610120575050600054826bffffffffffffffffffffffff60a01b821617600055167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0600080a380f35b51631e4fbdf760e01b8152908101849052602490fd5b8480fd5b8280fd5b50903461013a57602036600319011261013a5735916001600160a01b0383168303610178575061016f602092610536565b90519015158152f35b80fd5b50903461013a57602036600319011261013a577fc22e16deec6f587d0a1aad7275c1621e6c24431fea14dd71e8f3243e9fbc5ca39035916101ba61056c565b6001548151908152836020820152a160015580f35b838234610213578160031936011261021357517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b5080fd5b838234610213578160031936011261021357905490516001600160a01b039091168152602090f35b8382346102135781600319360112610213576020906001549051908152f35b8382346102135781600319360112610213576020906002549051908152f35b833461017857806003193601126101785761029661056c565b600080546001600160a01b0319811682556001600160a01b03167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08280a380f35b50903461013a57602036600319011261013a5735916001600160a01b03831683036101785750610308602092610503565b9051908152f35b50903461013a57602036600319011261013a57356001600160a01b0381169081900361013a57828291602094526003845220549051908152f35b50903461013a57602036600319011261013a577f5953b565c074c2cce1866b4e69c9efc4908556bb6fca70f735907c94d940551590359161038861056c565b6002548151908152836020820152a160025580f35b50919034610213578160031936011261021357338252600360205282822054801515806104cc575b6104a9575033825260036020528282204290556001547f00000000000000000000000000000000000000000000000000000000000000006001600160a01b031690813b156104a55783929160448492875195869384926340c10f1960e01b8452338885015260248401525af1801561049b5761046f575b828460015490519081527fd8138f8a3f377c5259ca548e70e4c2de94f129f5a11036a15b69513cba2b426a60203392a280f35b67ffffffffffffffff821161048857508252388061043c565b634e487b7160e01b835260419052602482fd5b84513d85823e3d90fd5b8380fd5b90836104ba602493600254906104e0565b905163598b3dfd60e11b815291820152fd5b506104d9600254826104e0565b42106103c5565b919082018092116104ed57565b634e487b7160e01b600052601160045260246000fd5b6001600160a01b031660009081526003602052604090205480156105305760025461052d916104e0565b90565b50600090565b6001600160a01b0316600090815260036020526040902054801561056657600254610560916104e0565b42101590565b50600190565b6000546001600160a01b0316330361058057565b60405163118cdaa760e01b8152336004820152602490fdfea2646970667358221220e0dc10308f25731754c6f50aa0719b91b97cf3d406ce8ca1da7151b2654bf2ae64736f6c63430008180033",
+  "deployedBytecode": "0x60406080815260048036101561001457600080fd5b600091823560e01c80634e71d92d1461039d5780634fc3f41a146103495780635c16e15e1461030f57806370f23da7146102d7578063715018a61461027d578063787a08a61461025e578063830953ab1461023f5780638da5cb5b14610217578063b0efe5d8146101cf578063b1c7ef0c1461017b578063bf3506c11461013e5763f2fde38b146100a457600080fd5b3461013a57602036600319011261013a576001600160a01b03823581811693919290849003610136576100d561056c565b8315610120575050600054826bffffffffffffffffffffffff60a01b821617600055167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e0600080a380f35b51631e4fbdf760e01b8152908101849052602490fd5b8480fd5b8280fd5b50903461013a57602036600319011261013a5735916001600160a01b0383168303610178575061016f602092610536565b90519015158152f35b80fd5b50903461013a57602036600319011261013a577fc22e16deec6f587d0a1aad7275c1621e6c24431fea14dd71e8f3243e9fbc5ca39035916101ba61056c565b6001548151908152836020820152a160015580f35b838234610213578160031936011261021357517f00000000000000000000000000000000000000000000000000000000000000006001600160a01b03168152602090f35b5080fd5b838234610213578160031936011261021357905490516001600160a01b039091168152602090f35b8382346102135781600319360112610213576020906001549051908152f35b8382346102135781600319360112610213576020906002549051908152f35b833461017857806003193601126101785761029661056c565b600080546001600160a01b0319811682556001600160a01b03167f8be0079c531659141344cd1fd0a4f28419497f9722a3daafe3b4186f6b6457e08280a380f35b50903461013a57602036600319011261013a5735916001600160a01b03831683036101785750610308602092610503565b9051908152f35b50903461013a57602036600319011261013a57356001600160a01b0381169081900361013a57828291602094526003845220549051908152f35b50903461013a57602036600319011261013a577f5953b565c074c2cce1866b4e69c9efc4908556bb6fca70f735907c94d940551590359161038861056c565b6002548151908152836020820152a160025580f35b50919034610213578160031936011261021357338252600360205282822054801515806104cc575b6104a9575033825260036020528282204290556001547f00000000000000000000000000000000000000000000000000000000000000006001600160a01b031690813b156104a55783929160448492875195869384926340c10f1960e01b8452338885015260248401525af1801561049b5761046f575b828460015490519081527fd8138f8a3f377c5259ca548e70e4c2de94f129f5a11036a15b69513cba2b426a60203392a280f35b67ffffffffffffffff821161048857508252388061043c565b634e487b7160e01b835260419052602482fd5b84513d85823e3d90fd5b8380fd5b90836104ba602493600254906104e0565b905163598b3dfd60e11b815291820152fd5b506104d9600254826104e0565b42106103c5565b919082018092116104ed57565b634e487b7160e01b600052601160045260246000fd5b6001600160a01b031660009081526003602052604090205480156105305760025461052d916104e0565b90565b50600090565b6001600160a01b0316600090815260036020526040902054801561056657600254610560916104e0565b42101590565b50600190565b6000546001600160a01b0316330361058057565b60405163118cdaa760e01b8152336004820152602490fdfea2646970667358221220e0dc10308f25731754c6f50aa0719b91b97cf3d406ce8ca1da7151b2654bf2ae64736f6c63430008180033",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}
